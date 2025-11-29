@@ -9,11 +9,14 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.contour import QuadContourSet
+import numpy.typing as npt
 from typing import List, Tuple, Union
 
-def _setup_surface() -> Tuple:
+
+def _setup_parabolic() -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64],npt.NDArray[np.float64]]:
     """
-        Discription: generate data for 3D parabolic surface
+        Description: generate data for 3D parabolic surface
         Inputs:
         Outputs: surface data         
     """
@@ -27,30 +30,52 @@ def _setup_surface() -> Tuple:
     Surface = 20 - X**2 - Y**2
     return (X, Y, Surface)
 
-def _create_plane(domain: List[Union[int, float]], height:Union[int, float], radius:Union[int,float]) -> Tuple:
+def _setup_cubiSurface() -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64],npt.NDArray[np.float64]]:
     """
-        Discription: return plane which has normal vector k
+        Description: generate data for 3D cubic surface
         Inputs:
-            domain: [domain start, domain end, step]
-            height: z postion
-            radius: radius of circle
-        Outputs: tuple
-            [0] plane data
-            [1] circle data
+        Outputs: surface data         
     """
-    X = np.arange(domain[0],domain[1],domain[2])
-    Y = np.arange(domain[0],domain[1],domain[2])
-    X,Y = np.meshgrid(X,Y,indexing='ij')
-    plane = np.full_like(X, height)
-    theta = np.linspace(0, 2*np.pi, 200)
-    x_circle = radius * np.cos(theta)
-    y_circle = radius * np.sin(theta)
-    z_circle = np.full_like(theta, height)
-    return (X,Y,plane), (x_circle, y_circle, z_circle)
+    X = np.arange(-4,4,0.01)
+    Y = np.arange(-4,4,0.01)
+    X, Y = np.meshgrid(X, Y, indexing='ij')
+    Surface = X**3 + Y**2 - 6*X
+    return (X, Y, Surface)
+
+def _create_Plane(xyList:npt.NDArray[np.float64]) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """
+        Description: generate data for inserting plane
+        Inputs: domain range
+        Outputs: plane data        
+    """
+    return tuple(np.meshgrid(xyList, xyList))
+
+def _create_levelset(Xmesh:npt.NDArray[np.float64], Ymesh:npt.NDArray[np.float64], 
+                  Surface:npt.NDArray[np.float64], zList:List[Union[int,float]]) -> QuadContourSet:
+    """
+        Description: generate level set data of correspoding z values
+        Inputs: 
+            Xmesh: X meshgrid
+            Ymesh: Y meshgrid
+            Surface: Surface of Xmesh and Ymesh
+            zList: target z coordinates
+        Outputs: level set data         
+    """
+    fig,ax = plt.subplots(figsize=(8,8),subplot_kw={"projection":"3d"})
+    curves_set = ax.contour(Xmesh, Ymesh, Surface, levels=zList, alpha=0)
+    plt.close(fig)
+    return curves_set
 
 def create_3D_parabolic(elevation: int, azimuth: int) -> None:
+    """
+        Description: generate image of 3D parabolic surface
+        Inputs: 
+            elevation: angle
+            azimuth: angle
+        Outputs: image.svg         
+    """
     
-    surface = _setup_surface()
+    surface = _setup_parabolic()
     fig,ax = plt.subplots(figsize=(8,8),subplot_kw={"projection":"3d"})
     ax.plot_surface(surface[0],surface[1],surface[2],cmap='viridis',alpha=0.9)
 
@@ -65,27 +90,36 @@ def create_3D_parabolic(elevation: int, azimuth: int) -> None:
     ax.view_init(elev=elevation, azim=azimuth)
     plt.savefig('3D_parabolic.svg')
     print("Image saved")
+    plt.close(fig)
 
 def create_3D_parabolic_insert(elevation:int, azimuth: int) -> None:
+    """
+        Description: generate image of 3D parabolic surface with plane
+        Inputs: 
+            elevation: angle
+            azimuth: angle
+        Outputs: image.svg         
+    """
     
-    surface = _setup_surface()
-    domain = [-6,6,0.05]
-    plane1, circle1 = _create_plane(domain=domain, height=16, radius=2)
-    plane2, circle2 = _create_plane(domain=domain, height=11, radius=3)
-    plane3, circle3 = _create_plane(domain=domain, height=4, radius=4)
-
+    surface = _setup_parabolic()
     fig,ax = plt.subplots(figsize=(8,8),subplot_kw={"projection":"3d"})
-
     ax.plot_surface(surface[0],surface[1],surface[2],cmap='viridis',alpha=0.9)
 
-    if elevation != 90:
-        ax.plot_surface(plane1[0],plane1[1],plane1[2],color='black',alpha=0.2)
-        ax.plot_surface(plane2[0],plane2[1],plane2[2],color='black',alpha=0.2)
-        ax.plot_surface(plane3[0],plane3[1],plane3[2],color='black',alpha=0.2)
+    zList = [4,8,12,16]
+    level_sets = _create_levelset(surface[0],surface[1],surface[2],zList)
+    for i, level_segments in enumerate(level_sets.allsegs):
+        z_level = zList[i] 
+        for seg in level_segments:
+            x_line = seg[:, 0]
+            y_line = seg[:, 1]
+            z_line = np.full_like(x_line, z_level)
+            ax.plot(x_line, y_line, z_line, color='red', linewidth=2, zorder=10)
 
-    ax.plot(circle1[0], circle1[1], circle1[2], color='red', linewidth=2,zorder=5)
-    ax.plot(circle2[0], circle2[1], circle2[2], color='red', linewidth=2,zorder=5)
-    ax.plot(circle3[0], circle3[1], circle3[2], color='red', linewidth=2,zorder=5)
+    if elevation != 90:
+        domain = np.arange(-6, 6, 0.5)
+        plane_X, plane_Y = _create_Plane(domain)
+        for z in zList:
+            ax.plot_surface(plane_X, plane_Y, np.full_like(plane_X, z), color='black', alpha=0.1)
 
     # transparent background
     ax.xaxis.set_pane_color((0.0, 0.0, 0.0, 0.0))
@@ -102,8 +136,88 @@ def create_3D_parabolic_insert(elevation:int, azimuth: int) -> None:
     else:
         plt.savefig('3D_parabolic_insert.svg')
     print("Image saved")
+    plt.close(fig)
+
+def create_cubicsurface(elevation:int, azimuth:int) -> None:
+    """
+        Description: generate image of 3D cubic surface
+        Inputs: 
+            elevation: angle
+            azimuth: angle
+        Outputs: image.svg         
+    """
+    surface = _setup_cubiSurface()
+
+    fig,ax = plt.subplots(figsize=(8,8),subplot_kw={"projection":"3d"})
+    ax.plot_surface(surface[0],surface[1],surface[2],cmap='viridis',alpha=0.9)
+
+    ax.xaxis.set_pane_color((0.0, 0.0, 0.0, 0.0))
+    ax.yaxis.set_pane_color((0.0, 0.0, 0.0, 0.0))
+    ax.zaxis.set_pane_color((0.0, 0.0, 0.0, 0.0))
+
+    ax.set_xticks(range(-6,8,2))
+    ax.set_yticks(range(-6,8,2))
+    ax.set_zticks(range(-40, 51, 10))
+    ax.view_init(elev=elevation, azim=azimuth)
+    plt.savefig('3D_cubicSurface.svg')
+    print('Image saved')
+    plt.close(fig)
+
+def create_cubicsurface_insert(elevation:int, azimuth:int) -> None:
+    """
+        Description: generate image of 3D cubic surface with plane
+        Inputs: 
+            elevation: angle
+            azimuth: angle
+        Outputs: image.svg         
+    """
+
+    surface = _setup_cubiSurface()
+
+    fig,ax = plt.subplots(figsize=(8,8),subplot_kw={"projection":"3d"})
+    ax.plot_surface(surface[0],surface[1],surface[2],cmap='viridis',alpha=0.9)
+
+    zList = [-25,-8, 0, 8, 25]
+    level_sets = _create_levelset(surface[0],surface[1],surface[2],zList)
+    for i, level_segments in enumerate(level_sets.allsegs):
+        z_level = zList[i] 
+        for seg in level_segments:
+            x_line = seg[:, 0]
+            y_line = seg[:, 1]
+            z_line = np.full_like(x_line, z_level)
+            ax.plot(x_line, y_line, z_line, color='red', linewidth=2, zorder=10)
+
+    if elevation != 90:
+        domain = np.arange(-6, 6, 0.5)
+        plane_X, plane_Y = _create_Plane(domain)
+        for z in zList:
+            ax.plot_surface(plane_X, plane_Y, np.full_like(plane_X, z), color='black', alpha=0.1)
+
+    ax.xaxis.set_pane_color((0.0, 0.0, 0.0, 0.0))
+    ax.yaxis.set_pane_color((0.0, 0.0, 0.0, 0.0))
+    ax.zaxis.set_pane_color((0.0, 0.0, 0.0, 0.0))
+
+    ax.set_xticks(range(-6,8,2))
+    ax.set_yticks(range(-6,8,2))
+    ax.set_zticks(range(-40, 51, 10))
+    ax.view_init(elev=elevation, azim=azimuth)
+    if elevation == 90:
+        ax.axis('off')
+        plt.savefig('3D_cubicSurface_insert_upper.svg')
+    else:
+        plt.savefig('3D_cubicSurface_insert.svg')
+    print('Image saved')
+    plt.close(fig)
+    
+
 
 if __name__ == "__main__":
+    # Create 3 image of 3D parabolic surface
     create_3D_parabolic(elevation=20,azimuth=315)
     create_3D_parabolic_insert(elevation=20,azimuth=315)
     create_3D_parabolic_insert(elevation=90,azimuth=0)
+
+    # Create 3 image of 3D cubic surface
+    create_cubicsurface(elevation=20, azimuth=225)
+    create_cubicsurface_insert(elevation=20, azimuth=225)
+    create_cubicsurface_insert(elevation=90, azimuth=0)
