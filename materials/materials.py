@@ -27,7 +27,7 @@ def _setup_parabolic() -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]
     # transforming polar coordiantes to cartesian coordinates
     X = r * np.cos(theta)
     Y = r * np.sin(theta)
-    Surface = 20 - X**2 - Y**2
+    Surface = 10 - X**2 - Y**2
     return (X, Y, Surface)
 
 def _setup_cubiSurface() -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64],npt.NDArray[np.float64]]:
@@ -86,7 +86,7 @@ def create_3D_parabolic(elevation: int, azimuth: int) -> None:
 
     ax.set_xticks(range(-6,8,2))
     ax.set_yticks(range(-6,8,2))
-    ax.set_zticks(range(0,21,2))
+    ax.set_zticks(range(-10,11,2))
     ax.view_init(elev=elevation, azim=azimuth)
     plt.savefig('3D_parabolic.svg')
     print("Image saved")
@@ -105,7 +105,7 @@ def create_3D_parabolic_insert(elevation:int, azimuth: int) -> None:
     fig,ax = plt.subplots(figsize=(8,8),subplot_kw={"projection":"3d"})
     ax.plot_surface(surface[0],surface[1],surface[2],cmap='viridis',alpha=0.9)
 
-    zList = [4,8,12,16]
+    zList = [-9,-4,0,4,9]
     level_sets = _create_levelset(surface[0],surface[1],surface[2],zList)
     for i, level_segments in enumerate(level_sets.allsegs):
         z_level = zList[i] 
@@ -128,7 +128,7 @@ def create_3D_parabolic_insert(elevation:int, azimuth: int) -> None:
 
     ax.set_xticks(range(-6,8,2))
     ax.set_yticks(range(-6,8,2))
-    ax.set_zticks(range(0,21,2))
+    ax.set_zticks(range(-10,11,2))
     ax.view_init(elev=elevation, azim=azimuth)
     if elevation == 90:
         ax.axis('off')
@@ -157,7 +157,7 @@ def create_cubicsurface(elevation:int, azimuth:int) -> None:
 
     ax.set_xticks(range(-6,8,2))
     ax.set_yticks(range(-6,8,2))
-    ax.set_zticks(range(-40, 51, 10))
+    ax.set_zticks(range(-50, 61, 10))
     ax.view_init(elev=elevation, azim=azimuth)
     plt.savefig('3D_cubicSurface.svg')
     print('Image saved')
@@ -199,7 +199,7 @@ def create_cubicsurface_insert(elevation:int, azimuth:int) -> None:
 
     ax.set_xticks(range(-6,8,2))
     ax.set_yticks(range(-6,8,2))
-    ax.set_zticks(range(-40, 51, 10))
+    ax.set_zticks(range(-40, 61, 10))
     ax.view_init(elev=elevation, azim=azimuth)
     if elevation == 90:
         ax.axis('off')
