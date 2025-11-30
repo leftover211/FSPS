@@ -1,18 +1,26 @@
-# ======Denpendecies======
+# =======Dependecies=======
 # python 3.10.19
 # matplotlib 3.10.8
 # numpy 2.2.6
-# pandas 2.3.3
-# ========================
+# =========================
 
 
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.contour import QuadContourSet
 import numpy.typing as npt
 from typing import List, Tuple, Union
+import os
 
+IMAGE_DIR = "levelset_images"
+
+def createStoreImage() -> None:
+    """
+        Description: create directory for simulation images
+    """
+    if not os.path.exists(IMAGE_DIR):
+        os.makedirs(IMAGE_DIR)
+        print(f"Directory '{IMAGE_DIR}' created.")
 
 def _setup_parabolic() -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64],npt.NDArray[np.float64]]:
     """
@@ -74,7 +82,7 @@ def create_3D_parabolic(elevation: int, azimuth: int) -> None:
             azimuth: angle
         Outputs: image.svg         
     """
-    
+    save_path = os.path.join(IMAGE_DIR, '3D_parabolic.svg')
     surface = _setup_parabolic()
     fig,ax = plt.subplots(figsize=(8,8),subplot_kw={"projection":"3d"})
     ax.plot_surface(surface[0],surface[1],surface[2],cmap='viridis',alpha=0.9)
@@ -88,7 +96,7 @@ def create_3D_parabolic(elevation: int, azimuth: int) -> None:
     ax.set_yticks(range(-6,8,2))
     ax.set_zticks(range(-10,11,2))
     ax.view_init(elev=elevation, azim=azimuth)
-    plt.savefig('3D_parabolic.svg')
+    plt.savefig(save_path)
     print("Image saved")
     plt.close(fig)
 
@@ -100,7 +108,6 @@ def create_3D_parabolic_insert(elevation:int, azimuth: int) -> None:
             azimuth: angle
         Outputs: image.svg         
     """
-    
     surface = _setup_parabolic()
     fig,ax = plt.subplots(figsize=(8,8),subplot_kw={"projection":"3d"})
     ax.plot_surface(surface[0],surface[1],surface[2],cmap='viridis',alpha=0.9)
@@ -132,9 +139,11 @@ def create_3D_parabolic_insert(elevation:int, azimuth: int) -> None:
     ax.view_init(elev=elevation, azim=azimuth)
     if elevation == 90:
         ax.axis('off')
-        plt.savefig('3D_parabolic_insert_upper.svg')
+        save_path = os.path.join(IMAGE_DIR, '3D_parabolic_insert_upper.svg')
+        plt.savefig(save_path)
     else:
-        plt.savefig('3D_parabolic_insert.svg')
+        save_path = os.path.join(IMAGE_DIR, '3D_parabolic_insert.svg')
+        plt.savefig(save_path)
     print("Image saved")
     plt.close(fig)
 
@@ -146,6 +155,7 @@ def create_cubicsurface(elevation:int, azimuth:int) -> None:
             azimuth: angle
         Outputs: image.svg         
     """
+    save_path = os.path.join(IMAGE_DIR, '3D_cubicSurface.svg')
     surface = _setup_cubiSurface()
 
     fig,ax = plt.subplots(figsize=(8,8),subplot_kw={"projection":"3d"})
@@ -159,7 +169,7 @@ def create_cubicsurface(elevation:int, azimuth:int) -> None:
     ax.set_yticks(range(-6,8,2))
     ax.set_zticks(range(-50, 61, 10))
     ax.view_init(elev=elevation, azim=azimuth)
-    plt.savefig('3D_cubicSurface.svg')
+    plt.savefig(save_path)
     print('Image saved')
     plt.close(fig)
 
@@ -171,7 +181,6 @@ def create_cubicsurface_insert(elevation:int, azimuth:int) -> None:
             azimuth: angle
         Outputs: image.svg         
     """
-
     surface = _setup_cubiSurface()
 
     fig,ax = plt.subplots(figsize=(8,8),subplot_kw={"projection":"3d"})
@@ -203,15 +212,18 @@ def create_cubicsurface_insert(elevation:int, azimuth:int) -> None:
     ax.view_init(elev=elevation, azim=azimuth)
     if elevation == 90:
         ax.axis('off')
-        plt.savefig('3D_cubicSurface_insert_upper.svg')
+        save_path = os.path.join(IMAGE_DIR, '3D_cubicSurface_insert_upper.svg')
+        plt.savefig(save_path)
     else:
-        plt.savefig('3D_cubicSurface_insert.svg')
+        save_path = os.path.join(IMAGE_DIR, '3D_cubicSurface_insert.svg')
+        plt.savefig(save_path)
     print('Image saved')
     plt.close(fig)
     
 
-
 if __name__ == "__main__":
+    createStoreImage()
+
     # Create 3 image of 3D parabolic surface
     create_3D_parabolic(elevation=20,azimuth=315)
     create_3D_parabolic_insert(elevation=20,azimuth=315)
@@ -220,4 +232,4 @@ if __name__ == "__main__":
     # Create 3 image of 3D cubic surface
     create_cubicsurface(elevation=20, azimuth=225)
     create_cubicsurface_insert(elevation=20, azimuth=225)
-    create_cubicsurface_insert(elevation=90, azimuth=0)
+    create_cubicsurface_insert(elevation=90, azimuth=270)
