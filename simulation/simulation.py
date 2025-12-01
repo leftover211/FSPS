@@ -15,20 +15,21 @@ from tqdm import tqdm
 import os
 
 
-# =======================
-#  Simulation Parameters
-# =======================
+# =============================
+#     Simulation Parameters
+# =============================
 MASK_TYPE = 1
-MASK_LENGTH = 1.2
+MASK_LENGTH = 1.0
 
 N = 100
+TARGET_TIME = 1.0
 
-X_MIN, X_MAX = -5.0, 5.0
-Y_MIN, Y_MAX = -5.0, 5.0
-Z_MIN, Z_MAX = -2.5, 0.5
+X_MIN, X_MAX = -3.0, 3.0
+Y_MIN, Y_MAX = -3.0, 3.0
+Z_MIN, Z_MAX = -1.5, 0.5
 
 IMAGE_DIR = "simulation_images"
-# =======================
+# =============================
 
 def createStoreImage() -> None:
     """
@@ -85,6 +86,23 @@ def _returnDelta() -> Tuple[float]:
     dz = (Z_MAX - Z_MIN) / (N - 1)
     return (dx, dy, dz)
 
+def print_etch_depth(phi: npt.NDArray, title: str) -> None:
+    """
+        Description: Calculates and prints the maximum etch depth.
+        Inputs:
+            phi: level set
+            title: 
+        Output: simulation etch depth
+    """
+    dx, dy, dz = _returnDelta()
+    try:
+        verts, faces, normals, values = measure.marching_cubes(phi, 0)
+        z_coords = Z_MIN + verts[:, 2] * dz
+        min_z = z_coords.min()
+        print(f"[{title}] Max Etch Depth: {min_z:.4f} (Target was ~{TARGET_TIME if TARGET_TIME else 'N/A'})")
+    except ValueError:
+        print(f"[{title}] Surface not found (Completely etched away or error).")
+
 
 def godunovUpwindScheme(phi:npt.NDArray, dx:float, dy:float, dz:float) -> npt.NDArray:
     """
@@ -115,7 +133,7 @@ def godunovUpwindScheme(phi:npt.NDArray, dx:float, dy:float, dz:float) -> npt.ND
     norm_grad = np.sqrt(gradX + gradY + gradZ+ 1e-20)
     return norm_grad
 
-def simulator(steps:int, Viso:float, Vansio:float) -> npt.NDArray:
+def simulator(Viso:float, Vaniso:float) -> npt.NDArray:
     """
         Description: Main algorithm for etching simulation
         Inputs:
@@ -134,8 +152,15 @@ def simulator(steps:int, Viso:float, Vansio:float) -> npt.NDArray:
 
     Phi = -Z 
     Is_Under_Mask = _setMask(X,Y,MASK_TYPE,MASK_LENGTH)
-    dt = 0.02
-    epsilon = 3.0 * np.mean([dx, dy, dz])
+
+    cfl_number = 0.25
+    max_velocity = Viso + Vaniso
+    if max_velocity == 0: max_velocity = 1.0
+
+    dt = cfl_number * min(dx,dy,dz) / max_velocity
+    steps = int(TARGET_TIME / dt)
+
+    print(f"\n[Simulation Config: Grid N={N}, dt={dt:.5f}, Total Steps={steps}]")
 
     for t in tqdm(range(steps), desc='PROGRESS', mininterval=0.001):
         gradUpwind = godunovUpwindScheme(Phi, dx, dy, dz)
@@ -145,13 +170,10 @@ def simulator(steps:int, Viso:float, Vansio:float) -> npt.NDArray:
         nz = np.abs(grad[2] / norm_grad_central)
 
         # Phenomenological model velocity: z direction
-        V_physics = Viso + (Vansio * nz)
+        V_physics = Viso + (Vaniso * nz)
         V_protected = Viso * (1.0 - nz)
         V_effective = np.where(Is_Under_Mask, V_protected, V_physics)
-
-        # Narrow Band Logic
-        is_near_interface = np.abs(Phi) < epsilon
-        V_final = np.where(is_near_interface, V_effective, 0.0)
+        V_final = V_effective
 
         # Level Set Update
         Phi = Phi - V_final * gradUpwind * dt
@@ -194,9 +216,13 @@ def plotResult(levelSet:npt.NDArray, elevation:int, azimuth:int, title) -> None:
     surf = ax.plot_surface(Mask_X, Mask_Y, Mask_Z, color='gray', alpha=0.4, 
                            linewidth=0, antialiased=False, rstride=2, cstride=2, shade=True)
 
+    range_x = X_MAX - X_MIN
+    range_y = Y_MAX - Y_MIN
+    range_z = Z_MAX - Z_MIN
     ax.set_xlim(X_MIN, X_MAX)
     ax.set_ylim(Y_MIN, Y_MAX)
-    ax.set_zlim(-0.5, 0.5)
+    ax.set_zlim(Z_MIN, Z_MAX)
+    ax.set_box_aspect((range_x, range_y, range_z))
     ax.grid('off')
     ax.axis(False)
     ax.view_init(elev=elevation, azim=azimuth)
@@ -212,16 +238,18 @@ if __name__ == "__main__":
     # Case1: Isotropic etching
     V_iso_1 = 1.0
     V_aniso_1 = 0.0
-    result_1 = simulator(steps=100, Viso=V_iso_1,Vansio=V_aniso_1)
-    plotResult(levelSet=result_1, elevation=20, azimuth=45, title="Isograpic etching_1")
-    plotResult(levelSet=result_1, elevation=0, azimuth=0, title="Isograpic etching_2")
-    plotResult(levelSet=result_1, elevation=-150, azimuth=45, title="Isograpic etching_3")
+    result_1 = simulator(Viso=V_iso_1,Vaniso=V_aniso_1)
+    print_etch_depth(result_1,"Isotropic")
+    plotResult(levelSet=result_1, elevation=20, azimuth=45, title="Isotropic etching_1")
+    plotResult(levelSet=result_1, elevation=0, azimuth=90, title="Isotropic etching_2")
+    plotResult(levelSet=result_1, elevation=-150, azimuth=45, title="Isotropic etching_3")
 
     # Case2: Anisotropic etching
     V_iso_2 = 0.0
     V_aniso_2 = 1.0
-    result_2 = simulator(steps=100, Viso=V_iso_2,Vansio=V_aniso_2)
-    plotResult(levelSet=result_2, elevation=20, azimuth=45, title="Anisographic etching_1")
-    plotResult(levelSet=result_2, elevation=0, azimuth=0, title="Anisographic etching_2")
-    plotResult(levelSet=result_2, elevation=-150, azimuth=45, title="Anisographic etching_3")
+    result_2 = simulator(Viso=V_iso_2,Vaniso=V_aniso_2)
+    print_etch_depth(result_2,"Anisotropic")
+    plotResult(levelSet=result_2, elevation=20, azimuth=45, title="Anisotropic etching_1")
+    plotResult(levelSet=result_2, elevation=0, azimuth=90, title="Anisotropic etching_2")
+    plotResult(levelSet=result_2, elevation=-150, azimuth=45, title="Anisotropic etching_3")
     
