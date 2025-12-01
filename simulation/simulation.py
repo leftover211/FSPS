@@ -11,6 +11,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from typing import List, Tuple, Union
 import numpy.typing as npt
 from skimage import measure
+from skimage.filters import gaussian
 from tqdm import tqdm
 import os
 
@@ -18,15 +19,15 @@ import os
 # =============================
 #     Simulation Parameters
 # =============================
-MASK_TYPE = 1
-MASK_LENGTH = 1.0
+MASK_TYPE = 3
+MASK_LENGTH = 0.6
 
-N = 100
-TARGET_TIME = 1.0
+N = 200
+TARGET_TIME = 0.5
 
 X_MIN, X_MAX = -3.0, 3.0
 Y_MIN, Y_MAX = -3.0, 3.0
-Z_MIN, Z_MAX = -1.5, 0.5
+Z_MIN, Z_MAX = -1.0, 0.5
 
 IMAGE_DIR = "simulation_images"
 # =============================
@@ -133,7 +134,82 @@ def godunovUpwindScheme(phi:npt.NDArray, dx:float, dy:float, dz:float) -> npt.ND
     norm_grad = np.sqrt(gradX + gradY + gradZ+ 1e-20)
     return norm_grad
 
+def godunovVerticalOnly(phi:npt.NDArray, dz:float) -> npt.NDArray:
+    """
+    Description: Calculates gradient ONLY in Z direction (Fixed: keeps array size same)
+    """
+    P = np.pad(phi, 1, mode='edge') 
+
+    BD_z_minus = (P[1:-1, 1:-1, 1:-1] - P[1:-1, 1:-1, 0:-2]) / dz
+    FD_z_plus  = (P[1:-1, 1:-1, 2:]   - P[1:-1, 1:-1, 1:-1]) / dz
+    gradZ = np.maximum(np.maximum(BD_z_minus, 0)**2, np.minimum(FD_z_plus, 0)**2)
+    
+    # Return purely vertical gradient magnitude (Shape: N, N, N)
+    return np.sqrt(gradZ + 1e-20)
+
 def simulator(Viso:float, Vaniso:float) -> npt.NDArray:
+    """
+        Description: Main algorithm for etching simulation
+        Inputs:
+            steps: total iteration
+            Viso: Phenomenological model velocity for isotropic etching
+            Vaniso: Phenomenological model velocity for anisotropic etching
+        Outputs:
+            Phi: level set
+    """
+    dx, dy, dz = _returnDelta()
+    x = np.linspace(X_MIN, X_MAX, N)
+    y = np.linspace(Y_MIN, Y_MAX, N)
+    z = np.linspace(Z_MIN, Z_MAX, N)
+    X, Y, Z = np.meshgrid(x, y, z, indexing='ij')
+
+    Phi = -Z 
+    Is_Under_Mask = _setMask(X,Y,MASK_TYPE,MASK_LENGTH)
+
+    cfl_number = 0.25
+    max_velocity = Viso + Vaniso
+    if max_velocity == 0: max_velocity = 1.0
+
+    dt = cfl_number * min(dx,dy,dz) / max_velocity
+    steps = int(TARGET_TIME / dt)
+
+    print(f"\n[Simulation Config: Grid N={N}, dt={dt:.5f}, Total Steps={steps}]")
+
+    for t in tqdm(range(steps), desc='PROGRESS', mininterval=0.001):
+
+        grad_Mag_All = godunovUpwindScheme(Phi, dx, dy, dz)
+        grad_Mag_Z = godunovVerticalOnly(Phi, dz)
+
+        grad = np.gradient(Phi, dx, dy, dz)
+        norm = np.sqrt(grad[0]**2 + grad[1]**2 + grad[2]**2 + 1e-10)
+        nz = np.abs(grad[2] / norm)
+
+        Is_Shadow_Zone = Is_Under_Mask               
+        Is_Solid_Mask = (Is_Under_Mask) & (Z >= 0.0)
+        
+        sidewall_threshold = 0.5
+        is_dry_blocked = (Is_Shadow_Zone) | (nz < sidewall_threshold)
+        
+        dry_rate = np.where(is_dry_blocked, 0.0, Vaniso)
+        dry_change = dry_rate * grad_Mag_Z
+
+        nz_upper = 0.995 
+        nz_lower = 0.900
+        ramp_factor = (nz_upper - nz) / (nz_upper - nz_lower)
+        wet_scale = np.clip(ramp_factor, 0.0, 1.0)
+        
+        wet_rate = np.where(Is_Shadow_Zone, Viso * wet_scale, Viso)
+        wet_change = wet_rate * grad_Mag_All
+
+        total_change = dry_change + wet_change
+        final_change = np.where(Is_Solid_Mask, 0.0, total_change)
+        
+        # Level Set Update
+        Phi = Phi - final_change * dt
+        
+    return Phi
+
+def simulator1(Viso:float, Vaniso:float) -> npt.NDArray:
     """
         Description: Main algorithm for etching simulation
         Inputs:
@@ -178,6 +254,7 @@ def simulator(Viso:float, Vaniso:float) -> npt.NDArray:
         # Level Set Update
         Phi = Phi - V_final * gradUpwind * dt
     return Phi
+
 
 def plotResult(levelSet:npt.NDArray, elevation:int, azimuth:int, title) -> None:
     """
