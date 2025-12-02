@@ -11,8 +11,8 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from typing import List, Tuple, Union
 import numpy.typing as npt
 from skimage import measure
-from skimage.filters import gaussian
 from tqdm import tqdm
+from numba import njit, prange
 import os
 
 
@@ -20,14 +20,14 @@ import os
 #     Simulation Parameters
 # =============================
 MASK_TYPE = 3
-MASK_LENGTH = 0.6
+MASK_LENGTH = 1.0
 
-N = 200
-TARGET_TIME = 0.5
+N = 100
+TARGET = 0.502
 
 X_MIN, X_MAX = -3.0, 3.0
 Y_MIN, Y_MAX = -3.0, 3.0
-Z_MIN, Z_MAX = -1.0, 0.5
+Z_MIN, Z_MAX = -0.5, 0.1
 
 IMAGE_DIR = "simulation_images"
 # =============================
@@ -100,7 +100,7 @@ def print_etch_depth(phi: npt.NDArray, title: str) -> None:
         verts, faces, normals, values = measure.marching_cubes(phi, 0)
         z_coords = Z_MIN + verts[:, 2] * dz
         min_z = z_coords.min()
-        print(f"[{title}] Max Etch Depth: {min_z:.4f} (Target was ~{TARGET_TIME if TARGET_TIME else 'N/A'})")
+        print(f"[{title}] Max Etch Depth: {min_z:.4f} (Target was ~{TARGET if TARGET else 'N/A'})")
     except ValueError:
         print(f"[{title}] Surface not found (Completely etched away or error).")
 
@@ -110,9 +110,9 @@ def godunovUpwindScheme(phi:npt.NDArray, dx:float, dy:float, dz:float) -> npt.ND
         Description: Implementaion of godunow upwind difference scheme
         Input:
             phi: domain
-            dx: delta x
-            dy: delta y
-            dz: delta z
+            dx:  delta x
+            dy:  delta y
+            dz:  delta z
         Output: gradient magnitude
     """
     P = np.pad(phi, 1, mode='edge')     # Padding for keeping numpy array size same
@@ -125,8 +125,9 @@ def godunovUpwindScheme(phi:npt.NDArray, dx:float, dy:float, dz:float) -> npt.ND
     FD_z_plus  = (P[1:-1, 1:-1, 2:]   - P[1:-1, 1:-1, 1:-1]) / dz
 
     # --------------- Riemann Solver -------------------
-    # Etcing equation is a convex function which simplfy
-    # godunov hamilton in a simple closed from solution.
+    # The Hamiltonian of the etching equation is convex.
+    # This property simplifies the Godunov flux into a 
+    # simple closed-form solution (Rouy-Tourin scheme).
     gradX = np.maximum(np.maximum(BD_x_minus, 0)**2, np.minimum(FD_x_plus, 0)**2)
     gradY = np.maximum(np.maximum(BD_y_minus, 0)**2, np.minimum(FD_y_plus, 0)**2)
     gradZ = np.maximum(np.maximum(BD_z_minus, 0)**2, np.minimum(FD_z_plus, 0)**2)
@@ -134,25 +135,55 @@ def godunovUpwindScheme(phi:npt.NDArray, dx:float, dy:float, dz:float) -> npt.ND
     norm_grad = np.sqrt(gradX + gradY + gradZ+ 1e-20)
     return norm_grad
 
-def godunovVerticalOnly(phi:npt.NDArray, dz:float) -> npt.NDArray:
+@njit(parallel=True, fastmath=True)
+def godunovUpwindScheme_parallel(phi, dx, dy, dz):
     """
-    Description: Calculates gradient ONLY in Z direction (Fixed: keeps array size same)
+        Description: Implementation of Godunov upwind difference scheme (Numba Optimized)
     """
-    P = np.pad(phi, 1, mode='edge') 
+    nx, ny, nz = phi.shape
+    norm_grad = np.zeros_like(phi)
 
-    BD_z_minus = (P[1:-1, 1:-1, 1:-1] - P[1:-1, 1:-1, 0:-2]) / dz
-    FD_z_plus  = (P[1:-1, 1:-1, 2:]   - P[1:-1, 1:-1, 1:-1]) / dz
-    gradZ = np.maximum(np.maximum(BD_z_minus, 0)**2, np.minimum(FD_z_plus, 0)**2)
-    
-    # Return purely vertical gradient magnitude (Shape: N, N, N)
-    return np.sqrt(gradZ + 1e-20)
+    for i in prange(nx):
+        for j in range(ny):
+            for k in range(nz):
+
+                im1 = max(i - 1, 0)
+                ip1 = min(i + 1, nx - 1)
+                
+                jm1 = max(j - 1, 0)
+                jp1 = min(j + 1, ny - 1)
+                
+                km1 = max(k - 1, 0)
+                kp1 = min(k + 1, nz - 1)
+
+                BD_x_minus = (phi[i, j, k] - phi[im1, j, k]) / dx
+                FD_x_plus  = (phi[ip1, j, k] - phi[i, j, k]) / dx
+                
+                BD_y_minus = (phi[i, j, k] - phi[i, jm1, k]) / dy
+                FD_y_plus  = (phi[i, jp1, k] - phi[i, j, k]) / dy
+                
+                BD_z_minus = (phi[i, j, k] - phi[i, j, km1]) / dz
+                FD_z_plus  = (phi[i, j, kp1] - phi[i, j, k]) / dz
+
+                # --------------- Riemann Solver -------------------
+                # The Hamiltonian of the etching equation is convex.
+                # This property simplifies the Godunov flux into a 
+                # simple closed-form solution (Rouy-Tourin scheme).
+                term_x = max(max(BD_x_minus, 0.0)**2, min(FD_x_plus, 0.0)**2)
+                term_y = max(max(BD_y_minus, 0.0)**2, min(FD_y_plus, 0.0)**2)
+                term_z = max(max(BD_z_minus, 0.0)**2, min(FD_z_plus, 0.0)**2)
+
+                norm_grad[i, j, k] = np.sqrt(term_x + term_y + term_z + 1e-20)
+
+    return norm_grad
+
 
 def simulator(Viso:float, Vaniso:float) -> npt.NDArray:
     """
         Description: Main algorithm for etching simulation
         Inputs:
-            steps: total iteration
-            Viso: Phenomenological model velocity for isotropic etching
+            steps:  total iteration
+            Viso:   Phenomenological model velocity for isotropic etching
             Vaniso: Phenomenological model velocity for anisotropic etching
         Outputs:
             Phi: level set
@@ -171,98 +202,35 @@ def simulator(Viso:float, Vaniso:float) -> npt.NDArray:
     if max_velocity == 0: max_velocity = 1.0
 
     dt = cfl_number * min(dx,dy,dz) / max_velocity
-    steps = int(TARGET_TIME / dt)
+    steps = int(TARGET / dt)
 
     print(f"\n[Simulation Config: Grid N={N}, dt={dt:.5f}, Total Steps={steps}]")
 
     for t in tqdm(range(steps), desc='PROGRESS', mininterval=0.001):
-
-        grad_Mag_All = godunovUpwindScheme(Phi, dx, dy, dz)
-        grad_Mag_Z = godunovVerticalOnly(Phi, dz)
-
-        grad = np.gradient(Phi, dx, dy, dz)
-        norm = np.sqrt(grad[0]**2 + grad[1]**2 + grad[2]**2 + 1e-10)
-        nz = np.abs(grad[2] / norm)
-
-        Is_Shadow_Zone = Is_Under_Mask               
-        Is_Solid_Mask = (Is_Under_Mask) & (Z >= 0.0)
-        
-        sidewall_threshold = 0.5
-        is_dry_blocked = (Is_Shadow_Zone) | (nz < sidewall_threshold)
-        
-        dry_rate = np.where(is_dry_blocked, 0.0, Vaniso)
-        dry_change = dry_rate * grad_Mag_Z
-
-        nz_upper = 0.995 
-        nz_lower = 0.900
-        ramp_factor = (nz_upper - nz) / (nz_upper - nz_lower)
-        wet_scale = np.clip(ramp_factor, 0.0, 1.0)
-        
-        wet_rate = np.where(Is_Shadow_Zone, Viso * wet_scale, Viso)
-        wet_change = wet_rate * grad_Mag_All
-
-        total_change = dry_change + wet_change
-        final_change = np.where(Is_Solid_Mask, 0.0, total_change)
-        
-        # Level Set Update
-        Phi = Phi - final_change * dt
-        
-    return Phi
-
-def simulator1(Viso:float, Vaniso:float) -> npt.NDArray:
-    """
-        Description: Main algorithm for etching simulation
-        Inputs:
-            steps: total iteration
-            Viso: Phenomenological model velocity for isotropic etching
-            Vaniso: Phenomenological model velocity for anisotropic etching
-        Outputs:
-            Phi: level set
-    """
-    dx, dy, dz = _returnDelta()
-    x = np.linspace(X_MIN, X_MAX, N)
-    y = np.linspace(Y_MIN, Y_MAX, N)
-    z = np.linspace(Z_MIN, Z_MAX, N)
-    X, Y, Z = np.meshgrid(x, y, z, indexing='ij')
-
-
-    Phi = -Z 
-    Is_Under_Mask = _setMask(X,Y,MASK_TYPE,MASK_LENGTH)
-
-    cfl_number = 0.25
-    max_velocity = Viso + Vaniso
-    if max_velocity == 0: max_velocity = 1.0
-
-    dt = cfl_number * min(dx,dy,dz) / max_velocity
-    steps = int(TARGET_TIME / dt)
-
-    print(f"\n[Simulation Config: Grid N={N}, dt={dt:.5f}, Total Steps={steps}]")
-
-    for t in tqdm(range(steps), desc='PROGRESS', mininterval=0.001):
-        gradUpwind = godunovUpwindScheme(Phi, dx, dy, dz)
+        # gradUpwind = godunovUpwindScheme(Phi, dx, dy, dz)
+        gradUpwind = godunovUpwindScheme_parallel(Phi, dx, dy, dz)
         
         grad = np.gradient(Phi, dx, dy, dz)
         norm_grad_central = np.sqrt(grad[0]**2 + grad[1]**2 + grad[2]**2 + 1e-10)
         nz = np.abs(grad[2] / norm_grad_central)
 
-        # Phenomenological model velocity: z direction
+        # Phenomenological model velocity
         V_physics = Viso + (Vaniso * nz)
         V_protected = Viso * (1.0 - nz)
         V_effective = np.where(Is_Under_Mask, V_protected, V_physics)
         V_final = V_effective
 
         # Level Set Update
-        Phi = Phi - V_final * gradUpwind * dt
+        Phi = Phi - V_final * gradUpwind * dt    
     return Phi
-
 
 def plotResult(levelSet:npt.NDArray, elevation:int, azimuth:int, title) -> None:
     """
         Description: save simulated image files to specific directory
         Inputs:
-            levelSet: surface data
+            levelSet:  surface data
             elevation: elevation angle
-            azimuth: azimuth angle
+            azimuth:   azimuth angle
             title: title for image
     """
     save_path = os.path.join(IMAGE_DIR, f'{title}.svg')
@@ -278,6 +246,14 @@ def plotResult(levelSet:npt.NDArray, elevation:int, azimuth:int, title) -> None:
         
     except ValueError:
         print("Surface not found within volume.")
+
+    base_x = np.linspace(X_MIN, X_MAX, 2)
+    base_y = np.linspace(Y_MIN, Y_MAX, 2)
+    Base_X, Base_Y = np.meshgrid(base_x, base_y)
+    Base_Z = np.full_like(Base_X, Z_MIN)
+
+    ax.plot_surface(Base_X, Base_Y, Base_Z, color='lightgray', alpha=0.6, 
+                    linewidth=0, antialiased=False, shade=True)
     
     mask_N = 200
     mask_x_lin = np.linspace(X_MIN, X_MAX, mask_N)
@@ -303,7 +279,6 @@ def plotResult(levelSet:npt.NDArray, elevation:int, azimuth:int, title) -> None:
     ax.grid('off')
     ax.axis(False)
     ax.view_init(elev=elevation, azim=azimuth)
-    plt.tight_layout()
     plt.savefig(save_path)
     print(f"{title} saved")
     plt.close(fig)

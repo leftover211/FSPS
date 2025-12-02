@@ -113,6 +113,7 @@ def create_3D_parabolic_insert(elevation:int, azimuth: int) -> None:
     ax.plot_surface(surface[0],surface[1],surface[2],cmap='viridis',alpha=0.9)
 
     zList = [-9,-4,0,4,9]
+    colorList = ['red','black','blue','orange','brown']
     level_sets = _create_levelset(surface[0],surface[1],surface[2],zList)
     for i, level_segments in enumerate(level_sets.allsegs):
         z_level = zList[i] 
@@ -120,7 +121,7 @@ def create_3D_parabolic_insert(elevation:int, azimuth: int) -> None:
             x_line = seg[:, 0]
             y_line = seg[:, 1]
             z_line = np.full_like(x_line, z_level)
-            ax.plot(x_line, y_line, z_line, color='red', linewidth=2, zorder=10)
+            ax.plot(x_line, y_line, z_line, color=colorList[i], linewidth=2, zorder=10)
 
     if elevation != 90:
         domain = np.arange(-6, 6, 0.5)
@@ -187,6 +188,7 @@ def create_cubicsurface_insert(elevation:int, azimuth:int) -> None:
     ax.plot_surface(surface[0],surface[1],surface[2],cmap='viridis',alpha=0.9)
 
     zList = [-25,-8, 0, 8, 25]
+    colorList = ['red','black','blue','orange','brown']
     level_sets = _create_levelset(surface[0],surface[1],surface[2],zList)
     for i, level_segments in enumerate(level_sets.allsegs):
         z_level = zList[i] 
@@ -194,7 +196,7 @@ def create_cubicsurface_insert(elevation:int, azimuth:int) -> None:
             x_line = seg[:, 0]
             y_line = seg[:, 1]
             z_line = np.full_like(x_line, z_level)
-            ax.plot(x_line, y_line, z_line, color='red', linewidth=2, zorder=10)
+            ax.plot(x_line, y_line, z_line, color=colorList[i], linewidth=2, zorder=10)
 
     if elevation != 90:
         domain = np.arange(-6, 6, 0.5)
