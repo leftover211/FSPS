@@ -14,6 +14,82 @@ import os
 
 IMAGE_DIR = "levelset_images"
 
+def level_set_vis(elevation:int, azimuth:int, arrow:bool, normal:bool, lev:bool) -> None:
+    fig,ax = plt.subplots(figsize=(8,8),subplot_kw={"projection":"3d"})
+
+    t = np.linspace(0, 2 * np.pi, 100)
+    radius = 3
+    x_circle = radius * np.cos(t)
+    y_circle = radius * np.sin(t)
+    z_circle = np.zeros_like(t)
+
+    if lev:
+        points = 200
+        random_x = np.random.uniform(-6, 6, points)
+        random_y = np.random.uniform(-6, 6, points)
+        random_z = np.zeros(points)
+    else:
+        random_x = [  5, -4,  3,  2,  1, -3, -1]
+        random_y = [  3,  2, -1,  1,  0, -2,  4]
+        random_z = [0,0,0,0,0,0,0]
+        
+    for i in range(len(random_x)):
+        x_i, y_i, z_i = random_x[i], random_y[i], random_z[i]
+        current_distance = np.sqrt(x_i**2 + y_i**2)
+            
+
+        if current_distance < radius:
+            ax.scatter(x_i, y_i, z_i, color='blue', s=5, marker='x',alpha=0.5)
+        else:
+            ax.scatter(x_i, y_i, z_i, color='blue', s=5, marker='o',alpha=0.5)
+        
+        ###### 길이 수정 #####
+        if arrow and current_distance > 0:
+                
+            if current_distance < radius:
+                direction_x = x_i / current_distance
+                direction_y = y_i / current_distance
+            else:
+                direction_x = -x_i / current_distance
+                direction_y = -y_i / current_distance
+                
+            arrow_length = np.abs(current_distance - radius)
+                    
+            u = direction_x * arrow_length
+            v = direction_y * arrow_length
+            w = 0 
+            if lev == False:
+                ax.quiver(x_i, y_i, z_i,u, v, w,color='green', arrow_length_ratio=0.5)
+            if normal:
+                if lev:
+                    if current_distance < radius:
+                        ax.scatter(x_i,y_i,-current_distance,color='orange')
+                    else:
+                        ax.scatter(x_i, y_i,current_distance,color='brown')
+                else:
+                    if current_distance < radius:
+                        ax.quiver(x_i, y_i, z_i,0, 0, current_distance,color='orange')
+                    else:
+                        ax.quiver(x_i, y_i, z_i,0, 0, -current_distance,color='brown')
+
+
+    ax.view_init(elev=elevation, azim=azimuth)
+    ax.plot(x_circle, y_circle, z_circle, color='red',linewidth=2)
+
+    # transparent background (기존 코드 유지)
+    ax.xaxis.set_pane_color((0.0, 0.0, 0.0, 0.0))
+    ax.yaxis.set_pane_color((0.0, 0.0, 0.0, 0.0))
+    ax.zaxis.set_pane_color((0.0, 0.0, 0.0, 0.0))
+    ax.set_xticks(range(-6,8,2))
+    ax.set_yticks(range(-6,8,2))
+    ax.set_zticks(range(-10,11,2))
+    ax.grid(False)
+    ax.axis('off')
+
+    plt.show()
+
+level_set_vis(elevation=10, azimuth=180, arrow=True, normal=True, lev=True)
+
 def createStoreImage() -> None:
     """
         Description: create directory for simulation images
