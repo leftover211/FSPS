@@ -1,8 +1,8 @@
-# =======Dependecies=======
+# =======Dependencies=======
 # python 3.10.19
 # matplotlib 3.10.8
 # numpy 2.2.6
-# =========================
+# ==========================
 
 
 import numpy as np
@@ -14,81 +14,164 @@ import os
 
 IMAGE_DIR = "levelset_images"
 
-def level_set_vis(elevation:int, azimuth:int, arrow:bool, normal:bool, lev:bool) -> None:
-    fig,ax = plt.subplots(figsize=(8,8),subplot_kw={"projection":"3d"})
+def _create_2D_circle(radius:Union[int,float]) -> Tuple[npt.NDArray,npt.NDArray,npt.NDArray]:
+    """
+        Description: Create a 2D circle with a given radius
+        Inputs:
+            radius: radius of the circle
+        Outputs:
+            x_circle: x-coordinates of the circle
+            y_circle: y-coordinates of the circle
+            z_circle: z-coordinates of the circle (all zeros)
+    """
+    domain = np.linspace(0, 2 * np.pi, 100)
+    x_circle = radius * np.cos(domain)
+    y_circle = radius * np.sin(domain)
+    z_circle = np.zeros_like(domain)
+    return x_circle, y_circle, z_circle
 
-    t = np.linspace(0, 2 * np.pi, 100)
-    radius = 3
-    x_circle = radius * np.cos(t)
-    y_circle = radius * np.sin(t)
-    z_circle = np.zeros_like(t)
-
-    if lev:
-        points = 200
+def _generate_points(Flag:bool, Number:int) -> Tuple[npt.NDArray,npt.NDArray,npt.NDArray]:
+    """
+        Description: Generate random points in 2D space
+        Inputs:
+            Flag: True for random points, False for fixed points
+            Number: Number of points to generate
+        Outputs:
+            random_x: x-coordinates of the points
+            random_y: y-coordinates of the points
+            random_z: z-coordinates of the points (all zeros)
+    """
+    if Flag:
+        points = Number
         random_x = np.random.uniform(-6, 6, points)
         random_y = np.random.uniform(-6, 6, points)
         random_z = np.zeros(points)
     else:
-        random_x = [  5, -4,  3,  2,  1, -3, -1]
-        random_y = [  3,  2, -1,  1,  0, -2,  4]
-        random_z = [0,0,0,0,0,0,0]
-        
-    for i in range(len(random_x)):
-        x_i, y_i, z_i = random_x[i], random_y[i], random_z[i]
-        current_distance = np.sqrt(x_i**2 + y_i**2)
-            
+        random_x = np.array([5, -4, 3, 2, 1, -3, -1])
+        random_y = np.array([3, 2, -1, 1, 0, -2, 4])
+        random_z = np.zeros_like(random_x)
+    return random_x, random_y, random_z
 
-        if current_distance < radius:
-            ax.scatter(x_i, y_i, z_i, color='blue', s=5, marker='x',alpha=0.5)
-        else:
-            ax.scatter(x_i, y_i, z_i, color='blue', s=5, marker='o',alpha=0.5)
-        
-        ###### 길이 수정 #####
-        if arrow and current_distance > 0:
-                
-            if current_distance < radius:
-                direction_x = x_i / current_distance
-                direction_y = y_i / current_distance
+def _set_alpha(elevation: int) -> float:
+    """
+        Description: Set the transparency of the points based on the elevation angle
+    """
+    return 1.0 if elevation == 90 else 0.6
+
+def _set_size(Flag: bool) -> float:
+    """
+        Description: Set the size of the points based on the Flag
+    """
+    return 0.1 if Flag else 20.0
+
+
+def level_set_vis(elevation: int, azimuth: int, arrow: bool, normal: bool, lev: bool) -> None:
+    """
+        Description: Visualize the level set of a 2D circle with random points
+        Inputs:
+            elevation: elevation angle of the camera
+            azimuth: azimuth angle of the camera
+            arrow: True to show the arrows, False otherwise
+            normal: True to show the normals, False otherwise
+            lev: True to show the level set, False otherwise
+        Outputs:
+            None
+    """
+    fig, ax = plt.subplots(figsize=(8, 8), subplot_kw={"projection": "3d"})
+
+    RADIUS = 3.0
+    x_circle, y_circle, z_circle = _create_2D_circle(radius=RADIUS)
+    
+    num_points = 20000 if lev else 7 
+    rnd_x, rnd_y, rnd_z = _generate_points(Flag=lev, Number=num_points)
+    
+    alpha = _set_alpha(elevation=elevation)
+    size = _set_size(Flag=lev)
+
+    dist = np.sqrt(rnd_x**2 + rnd_y**2)
+    
+    inside = dist < RADIUS
+    outside = ~inside
+    
+    sdf = np.zeros_like(dist)
+    sdf[inside] = np.abs(RADIUS - dist[inside])
+    sdf[outside] = -np.abs(dist[outside] - RADIUS)
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        dir_x = rnd_x / dist
+        dir_y = rnd_y / dist
+    dir_x = np.nan_to_num(dir_x)
+    dir_y = np.nan_to_num(dir_y)
+
+    if not lev:
+        ax.scatter(rnd_x[inside], rnd_y[inside], rnd_z[inside], 
+                   color='blue', s=size, marker='x', alpha=alpha)
+        ax.scatter(rnd_x[outside], rnd_y[outside], rnd_z[outside], 
+                   color='blue', s=size, marker='o', alpha=alpha)
+
+    if arrow:
+        if not lev:
+            len_in = np.abs(RADIUS - dist[inside])
+            ax.quiver(rnd_x[inside], rnd_y[inside], rnd_z[inside], 
+                      dir_x[inside] * len_in, dir_y[inside] * len_in, 0, 
+                      color='cyan', arrow_length_ratio=0.3)
+            len_out = np.abs(dist[outside] - RADIUS)
+            ax.quiver(rnd_x[outside], rnd_y[outside], rnd_z[outside], 
+                      -dir_x[outside] * len_out, -dir_y[outside] * len_out, 0, 
+                      color='coral', arrow_length_ratio=0.3)
+
+        if normal:
+            if lev:
+                ax.scatter(rnd_x[inside], rnd_y[inside], sdf[inside], 
+                           color='cyan', s=size, alpha=alpha)
+                ax.scatter(rnd_x[outside], rnd_y[outside], sdf[outside], 
+                           color='coral', s=size, alpha=alpha)
             else:
-                direction_x = -x_i / current_distance
-                direction_y = -y_i / current_distance
-                
-            arrow_length = np.abs(current_distance - radius)
-                    
-            u = direction_x * arrow_length
-            v = direction_y * arrow_length
-            w = 0 
-            if lev == False:
-                ax.quiver(x_i, y_i, z_i,u, v, w,color='green', arrow_length_ratio=0.5)
-            if normal:
-                if lev:
-                    if current_distance < radius:
-                        ax.scatter(x_i,y_i,-current_distance,color='orange')
-                    else:
-                        ax.scatter(x_i, y_i,current_distance,color='brown')
-                else:
-                    if current_distance < radius:
-                        ax.quiver(x_i, y_i, z_i,0, 0, current_distance,color='orange')
-                    else:
-                        ax.quiver(x_i, y_i, z_i,0, 0, -current_distance,color='brown')
+                len_in = np.abs(RADIUS - dist[inside])
+                ax.quiver(rnd_x[inside], rnd_y[inside], rnd_z[inside], 
+                          0, 0, len_in, color='cyan')
+                len_out = np.abs(dist[outside] - RADIUS)
+                ax.quiver(rnd_x[outside], rnd_y[outside], rnd_z[outside], 
+                          0, 0, -len_out, color='coral')
 
+    ax.plot(x_circle, y_circle, z_circle, color='red', linewidth=2)
 
+    ax.set_xlim(-6, 6)
+    ax.set_ylim(-6, 6)
+    ax.set_zlim(-4, 4)
     ax.view_init(elev=elevation, azim=azimuth)
-    ax.plot(x_circle, y_circle, z_circle, color='red',linewidth=2)
-
-    # transparent background (기존 코드 유지)
-    ax.xaxis.set_pane_color((0.0, 0.0, 0.0, 0.0))
-    ax.yaxis.set_pane_color((0.0, 0.0, 0.0, 0.0))
-    ax.zaxis.set_pane_color((0.0, 0.0, 0.0, 0.0))
-    ax.set_xticks(range(-6,8,2))
-    ax.set_yticks(range(-6,8,2))
-    ax.set_zticks(range(-10,11,2))
+    
+    ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
     ax.grid(False)
     ax.axis('off')
 
-    plt.show()
 
-level_set_vis(elevation=10, azimuth=180, arrow=True, normal=True, lev=True)
+    if arrow and normal and lev:
+        save_path = os.path.join(IMAGE_DIR, 'Level_set.svg')
+        plt.savefig(save_path)
+        print(f"Saved: {save_path}")
+
+    elif arrow and normal and not lev:
+        save_path = os.path.join(IMAGE_DIR, '3D_circle_normal.svg')
+        plt.savefig(save_path)
+        print(f"Saved: {save_path}")
+
+    elif arrow and not normal and not lev:
+        if elevation == 90:
+            save_path = os.path.join(IMAGE_DIR, '2D_circle_arrow_upper.svg')
+        else:
+            save_path = os.path.join(IMAGE_DIR, '2D_circle_arrow.svg')
+        plt.savefig(save_path)
+        print(f"Saved: {save_path}")
+
+    elif not arrow and not normal and not lev:
+        save_path = os.path.join(IMAGE_DIR, '2D_circle.svg')
+        plt.savefig(save_path)
+        print(f"Saved: {save_path}")
+        
+    plt.close(fig)
 
 def createStoreImage() -> None:
     """
@@ -137,7 +220,7 @@ def _create_Plane(xyList:npt.NDArray[np.float64]) -> Tuple[npt.NDArray[np.float6
 def _create_levelset(Xmesh:npt.NDArray[np.float64], Ymesh:npt.NDArray[np.float64], 
                   Surface:npt.NDArray[np.float64], zList:List[Union[int,float]]) -> QuadContourSet:
     """
-        Description: generate level set data of correspoding z values
+        Description: generate level set data of corresponding z values
         Inputs: 
             Xmesh: X meshgrid
             Ymesh: Y meshgrid
@@ -303,11 +386,18 @@ if __name__ == "__main__":
     createStoreImage()
 
     # Create 3 image of 3D parabolic surface
-    create_3D_parabolic(elevation=20,azimuth=315)
-    create_3D_parabolic_insert(elevation=20,azimuth=315)
-    create_3D_parabolic_insert(elevation=90,azimuth=0)
+    # create_3D_parabolic(elevation=20,azimuth=315)
+    # create_3D_parabolic_insert(elevation=20,azimuth=315)
+    # create_3D_parabolic_insert(elevation=90,azimuth=0)
 
     # Create 3 image of 3D cubic surface
-    create_cubicsurface(elevation=20, azimuth=225)
-    create_cubicsurface_insert(elevation=20, azimuth=225)
-    create_cubicsurface_insert(elevation=90, azimuth=270)
+    # create_cubicsurface(elevation=20, azimuth=225)
+    # create_cubicsurface_insert(elevation=20, azimuth=225)
+    # create_cubicsurface_insert(elevation=90, azimuth=270)
+
+
+    level_set_vis(elevation=90, azimuth=70, arrow=False, normal=False, lev=False)
+    level_set_vis(elevation=90, azimuth=70, arrow=True, normal=False, lev=False)
+    level_set_vis(elevation=25, azimuth=70, arrow=True, normal=False, lev=False)
+    level_set_vis(elevation=20, azimuth=70, arrow=True, normal=True, lev=False)
+    level_set_vis(elevation=20, azimuth=150, arrow=True, normal=True, lev=True)
