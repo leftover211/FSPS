@@ -1,4 +1,4 @@
-# Feature Scale Profile Simulation (FSPS)
+# LSM and Etching Simulation
 
 ## 🛠️ Dependencies
 
