@@ -1,6 +1,6 @@
 # Feature Scale Profile Simulation (FSPS)
 
-## 🛠️ Tech Stack & Dependencies
+## 🛠️ Dependencies
 
 * **Python** 3.10.19
 * **NumPy** 2.2.6
