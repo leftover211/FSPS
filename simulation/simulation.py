@@ -207,8 +207,8 @@ def simulator(Viso:float, Vaniso:float) -> npt.NDArray:
     print(f"\n[Simulation Config: Grid N={N}, dt={dt:.5f}, Total Steps={steps}]")
 
     for t in tqdm(range(steps), desc='PROGRESS', mininterval=0.001):
-        # gradUpwind = godunovUpwindScheme(Phi, dx, dy, dz)
-        gradUpwind = godunovUpwindScheme_parallel(Phi, dx, dy, dz)
+        gradUpwind = godunovUpwindScheme(Phi, dx, dy, dz)
+        # gradUpwind = godunovUpwindScheme_parallel(Phi, dx, dy, dz)
         
         grad = np.gradient(Phi, dx, dy, dz)
         norm_grad_central = np.sqrt(grad[0]**2 + grad[1]**2 + grad[2]**2 + 1e-10)
