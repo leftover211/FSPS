@@ -51,5 +51,3 @@ python materials.py
 ---
 
 
-## 📝 Author's Note
-This project was used in the presentation for the **Micro/Nano Mechanical Engineering** course.
