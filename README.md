@@ -19,26 +19,31 @@ pip install numpy matplotlib scikit-image tqdm
 
 ```bash
 .
-├── etching_simulation.py     
-├── surface_visualization.py   
-├── simulation_images/       
+├── materials/
+│   ├── levelset_images/      
+│   └── materials.py         
+├── simulation/
+│   ├── simulation_images/    
+│   └── simulation.py        
 └── README.md
 ```
 
 ## 💻 Usage
 
 ### 1. Run Etching Simulation
+Move to simulation directory
 To simulate the etching profile evolution (Wet vs Dry) and generate result images:
 ```bash
-python etching_simulation.py
+python simulation.py
 ```
 * It generates 3D visualization results (`.svg`) for both Isotropic and Anisotropic cases.
 * **Output Location:** `simulation_images/` directory.
 
 ### 2. Run Concept Visualization
+Move to materials directory
 To visualize the fundamental mathematical concept of the Level Set Method :
 ```bash
-python surface_visualization.py
+python materials.py
 ```
 * This script visualizes the 3D level set function $\phi$ and its zero-level contour.
 * **Output Location:** `levelset_images/` directory.
