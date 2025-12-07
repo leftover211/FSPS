@@ -23,7 +23,7 @@ MASK_TYPE = 3
 MASK_LENGTH = 1.0
 
 N = 100
-TARGET = 0.502
+TARGET = 1.0
 
 X_MIN, X_MAX = -3.0, 3.0
 Y_MIN, Y_MAX = -3.0, 3.0
